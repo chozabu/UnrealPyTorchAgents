@@ -21,26 +21,21 @@ from unreal_engine.enums import EInputEvent, ETraceTypeQuery, EDrawDebugTrace
 
 max_action = 1.0
 
-gamma = 0.99  # discount for future rewards
-batch_size = 128  # num of transitions sampled from replay buffer
-lr = 0.00001
-exploration_noise = 0.4
-polyak = 0.995  # target policy update parameter (1-tau)
-policy_noise = 0.2  # target policy smoothing noise
-noise_clip = 0.5
-policy_delay = 2  # delayed policy updates parameter
-max_timesteps = 1000  # max timesteps in one episode
+# gamma = 0.99  # discount for future rewards
+# batch_size = 128  # num of transitions sampled from replay buffer
+# lr = 0.00001
+# exploration_noise = 0.4
+# polyak = 0.995  # target policy update parameter (1-tau)
+# policy_noise = 0.2  # target policy smoothing noise
+# noise_clip = 0.5
+# policy_delay = 2  # delayed policy updates parameter
+# max_timesteps = 1000  # max timesteps in one episode
 
 directory = "./NNModels/FaceLobster3d"  # save trained models
-loadpol = False
-loadfilename = "TD3_Skel3dX5"
-filename =     "TD3_Skel3dX5"
-
 
 Path(directory).mkdir(parents=True, exist_ok=True)
 
 print(os.path.abspath(directory))
-
 
 master = None
 
@@ -49,38 +44,49 @@ class TorchWalkerMaster:
         global master
         self.has_init = False
         master = self
+
+
+
         self.replay_buffer = ReplayBuffer(max_size=200000)
 
         self.frame = 0
 
-
         self.episode = 0
         self.worker_id = 0
 
-        self.writer = SummaryWriter(os.path.join(directory, filename))
         self.can_thread = True
+        self.actor = None
 
     # this is called on game start
     def begin_play(self):
         global master
         if not master:
             master = self
+
+        if not self.actor:
+            self.actor = self.uobject.get_owner()
+
         ue.log('Begin Play on TorchWalkerMaster class')
         ue.log("Has CUDA: {}".format(torch.cuda.is_available()))
 
+
+        self.writer = SummaryWriter(os.path.join(directory, self.actor.SaveName))
+
     def init_network(self, state_dim, action_dim):
         if not self.has_init:
+            if not self.actor:
+                self.actor = self.uobject.get_owner()
             print("--INITNET---")
             self.has_init = True
             self.state_dim = state_dim
             self.action_dim = action_dim
-            self.policy = TD3(lr, state_dim, action_dim, max_action)
+            self.policy = TD3(self.actor.learning_rate, state_dim, action_dim, max_action)
             print(state_dim)
             print(action_dim)
             print("--INITNET---")
 
-            if loadpol:
-                self.policy.load(directory, loadfilename)
+            if self.actor.LoadFile:
+                self.policy.load(directory, self.actor.LoadName)
 
     def get_next_ep(self):
         self.episode += 1
@@ -108,8 +114,8 @@ class TorchWalkerMaster:
 
     def thread_func(self):
         if self.replay_buffer.size:
-            al, c1l, c2l, prl = self.policy.update(self.replay_buffer, 200, batch_size, gamma, polyak, policy_noise,
-                                                   noise_clip, policy_delay)
+            al, c1l, c2l, prl = self.policy.update(self.replay_buffer, 200, self.actor.batch_size, self.actor.gamma, self.actor.polyak, self.actor.policy_noise,
+                                                   self.actor.noise_clip, self.actor.policy_delay)
             print("aloss:{}, frame:{}, mem:{}".format(al, self.frame, self.replay_buffer.size))
             self.writer.add_scalar('actor_loss',
                                    al,
@@ -138,7 +144,7 @@ class TorchWalkerMaster:
             self.can_thread = False
 
         if self.frame % 600 == 0:
-            self.policy.save(directory, filename)
+            self.policy.save(directory, self.actor.SaveName)
 
 class TorchWalkerMinion:
 
@@ -158,7 +164,7 @@ class TorchWalkerMinion:
         self.exploration_noise = random.random()*0.3
 
     # this is called on game start
-    def begin_play(self):
+    def post_init(self):
         self.actor = self.uobject.get_owner()
         ue.log('Begin Play on TorchWalkerMinion class')
 
@@ -186,7 +192,7 @@ class TorchWalkerMinion:
         self.actor.reset_dude()
         self.random_frames = random.randint(3,9)
 
-    def tick(self, delta_time):
+    def pytick(self):
         self.ep_frame+=1
 
         #############get observation#############
@@ -196,7 +202,7 @@ class TorchWalkerMinion:
 
         ### random action for a few frames ###
         if self.ep_frame < self.random_frames:
-            action = np.random.normal(0, exploration_noise*5, size=master.action_dim)
+            action = np.random.normal(0, master.actor.exploration_noise*5, size=master.action_dim)
             self.actor.set_action(action.tolist())
             return
 
