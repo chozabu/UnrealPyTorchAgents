@@ -165,7 +165,6 @@ class TorchWalkerMinion:
 
         self.random_frames = 10
 
-        self.exploration_noise = random.random()*0.3
 
     # this is called on game start
     def post_init(self):
@@ -178,6 +177,9 @@ class TorchWalkerMinion:
         actionlen = self.actor.get_action_dim()
         obslen = len(self.actor.update_observation()[0])
         master.init_network(obslen, actionlen)
+
+
+        self.exploration_noise = master.actor.exploration_noise*random.random()
 
         self.my_id = master.get_id()
 
