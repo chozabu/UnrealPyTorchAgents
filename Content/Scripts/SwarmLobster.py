@@ -85,8 +85,12 @@ class TorchWalkerMaster:
             print(action_dim)
             print("--INITNET---")
 
-            if self.actor.LoadFile:
-                self.policy.load(directory, self.actor.LoadName)
+            try:
+                if self.actor.LoadFile:
+                    self.policy.load(directory, self.actor.LoadName)
+            except:
+                print("---WARNING--- could not load file, check master filename")
+
 
     def get_next_ep(self):
         self.episode += 1
