@@ -204,6 +204,8 @@ class TorchWalkerMinion:
         if self.ep_frame < self.random_frames:
             action = np.random.normal(0, master.actor.exploration_noise*5, size=master.action_dim)
             self.actor.set_action(action.tolist())
+            self.last_state = state
+            self.last_action = action
             return
 
         #############get action from policy###############
@@ -222,7 +224,7 @@ class TorchWalkerMinion:
 
         done = self.actor.done
         #timeout, new EP
-        if self.ep_frame > max_timesteps:
+        if self.ep_frame > master.actor.max_timesteps:
             done = True
 
         self.ep_reward += reward
